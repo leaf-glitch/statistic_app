@@ -54,8 +54,8 @@ if uploaded_file:
             valid_nums_found = 0
             for v in row.iloc[1:]:
                 try: num_value = float(v)
-                    data_list.append({"group": g_name, "value": num_value})
-                    valid_nums_found += 1
+                     data_list.append({"group": g_name, "value": num_value})
+                     valid_nums_found += 1
                 except (ValueError, TypeError):
                     continue
         
