@@ -51,9 +51,12 @@ if uploaded_file:
             row = df_raw.iloc[i].dropna()
             if len(row) < 2: continue
             g_name = str(row.iloc[0])
+            valid_nums_found = 0
             for v in row.iloc[1:]:
-                try: data_list.append({"group": g_name, "value": float(v)})
-                except: continue
+                try: num_value = float(v)
+                    data_list.append({"group": g_name, "value": num_value})
+                    valid_nums_found += 1
+                except (ValueError, TypeError):continue
         
         if data_list:
             final_df = pd.DataFrame(data_list)
