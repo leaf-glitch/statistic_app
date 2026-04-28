@@ -10,7 +10,7 @@ st.set_page_config(page_title="statistics tool", layout="wide")
 st.title("statistics tool")
 st.markdown("Values are labeled at the top of the error bars and rounded to two decimal places")
 
-# Session State 
+#  Session State 
 if 'analysis_results' not in st.session_state:
     st.session_state.analysis_results = None
 if 'df_final' not in st.session_state:
@@ -34,46 +34,26 @@ analysis_type = st.sidebar.selectbox("Statistics Test Type", ["one-way ANOVA", "
 uploaded_file = st.file_uploader("Upload Excel/CSV", type=["xlsx", "csv"])
 
 if uploaded_file:
+    # read data
     if uploaded_file.name.endswith('.csv'):
         df_raw = pd.read_csv(uploaded_file, header=None)
     else:
         df_raw = pd.read_excel(uploaded_file, header=None)
     df_raw = df_raw.dropna(how='all')
 
-    st.subheader(" 📂 Data Selection")
-    st.info("💡 Please select the rows you want to include in the analysis using the checkboxes on the left.")
-    
-    # 建立一個帶有勾選欄位的 Dataframe
-    df_with_selections = df_raw.copy()
-    df_with_selections.insert(0, "Select", True)
-    
-    # 使用 data_editor 讓使用者直接在預覽圖上選取
-    edited_df = st.data_editor(
-        df_with_selections,
-        hide_index=True,
-        column_config={"Select": st.column_config.CheckboxColumn(required=True)},
-        disabled=df_raw.columns, # 除了勾選框，其他欄位不可編輯
-        use_container_width=True,
-        key="data_selector"
-    )
+    # preview data
+    st.subheader(" Raw Data Preview")
+    st.dataframe(df_raw, use_container_width=True)
 
-    # 執行按鈕
-    if st.sidebar.button(" 🚀 Execute Statistical Analysis"):
-        # 過濾出被勾選的資料
-        selected_data = edited_df[edited_df["Select"] == True].drop(columns=["Select"])
-        
+    if st.sidebar.button(" Execute/Reset Statistical Analysis"):
         data_list = []
-        for i in range(len(selected_data)):
-            row = selected_data.iloc[i].dropna()
+        for i in range(len(df_raw)):
+            row = df_raw.iloc[i].dropna()
             if len(row) < 2: continue
-            
             g_name = str(row.iloc[0])
             for v in row.iloc[1:]:
-                try:
-                    num_value = float(v)
-                    data_list.append({"group": g_name, "value": num_value})
-                except (ValueError, TypeError):
-                    continue
+                try: data_list.append({"group": g_name, "value": float(v)})
+                except: continue
         
         if data_list:
             final_df = pd.DataFrame(data_list)
@@ -93,7 +73,7 @@ if uploaded_file:
                             "label": f"{r['group1']} vs {r['group2']}",
                             "g1": r['group1'], "g2": r['group2'], "p": r['p-adj'], "sig": r['reject']
                         })
-            else:
+            else: # T-test
                 if len(group_data) == 2:
                     t_stat, p_val = stats.ttest_ind(group_data.iloc[0], group_data.iloc[1])
                     results["p_total"] = p_val
@@ -114,6 +94,7 @@ if st.session_state.analysis_results:
 
     with col_set:
         st.subheader("plot settings")
+        
         group_styles = {}
         for g in unique_groups:
             with st.expander(f"plot settings: {g}"):
@@ -124,25 +105,35 @@ if st.session_state.analysis_results:
         st.write("Select Significance Lines to Display")
         selected_pairs = []
         for pair in res["pairs"]:
-            is_checked = st.checkbox(f"{pair['label']} (p={pair['p']:.4f})", value=False, key=f"check_{pair['label']}")
-            if is_checked: selected_pairs.append(pair)
+            is_checked = st.checkbox(f"{pair['label']} (p={pair['p']:.4f})", 
+                                     value=False, 
+                                     key=f"check_{pair['label']}")
+            if is_checked:
+                selected_pairs.append(pair)
 
     with col_plot:
         stats_summary = df.groupby("group")["value"].agg(['mean', 'std']).reindex(unique_groups).reset_index()
         fig, ax = plt.subplots(figsize=(8, 6))
+        
         x_pos = np.arange(len(unique_groups))
         max_total_y = (stats_summary['mean'] + stats_summary['std']).max()
 
         for i, row in stats_summary.iterrows():
             s = group_styles[row['group']]
-            ax.bar(i, row['mean'], yerr=[[0], [row['std']]], color=s['color'], hatch=s['hatch'], edgecolor='black', linewidth=2, capsize=6)
+            ax.bar(i, row['mean'], yerr=[[0], [row['std']]], 
+                   color=s['color'], hatch=s['hatch'],
+                   edgecolor='black', linewidth=2, capsize=6)
+            
+            # Add value labels on top of error bars
             label_y = row['mean'] + row['std'] + (max_total_y * 0.02)
-            ax.text(i, label_y, f"{row['mean']:.2f}", ha='center', va='bottom', fontweight='bold', color='black', fontsize=10)
+            ax.text(i, label_y, f"{row['mean']:.2f}", ha='center', va='bottom', 
+                    fontweight='bold', color='black', fontsize=10)
 
         if selected_pairs:
             selected_pairs.sort(key=lambda x: abs(unique_groups.index(str(x['g1'])) - unique_groups.index(str(x['g2']))))
             base_y = max_total_y * 1.15
             step_y = max_total_y * 0.15
+            
             for i, p in enumerate(selected_pairs):
                 idx1, idx2 = unique_groups.index(str(p['g1'])), unique_groups.index(str(p['g2']))
                 y = base_y + (i * step_y)
@@ -154,9 +145,13 @@ if st.session_state.analysis_results:
         ax.set_xticklabels(unique_groups)
         ax.spines['top'].set_visible(False)
         ax.spines['right'].set_visible(False)
+        ax.set_ylabel("")
+        ax.set_title("")
         ax.set_ylim(0, ax.get_ylim()[1] * 1.25)
+        
         st.pyplot(fig)
         
     with st.expander(" View Detailed Statistical Report"):
         st.write(f"Overall Test Result: p = {res['p_total']:.6f}")
-        if "tukey_df" in res: st.dataframe(res["tukey_df"])
+        if "tukey_df" in res:
+            st.dataframe(res["tukey_df"])
