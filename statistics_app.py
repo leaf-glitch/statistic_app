@@ -40,35 +40,31 @@ if uploaded_file:
         df_raw = pd.read_excel(uploaded_file, header=None)
     df_raw = df_raw.dropna(how='all')
 
-    st.subheader(" Raw Data Preview")
-    st.dataframe(df_raw, use_container_width=True)
-
-    # --- 篩選範圍設定區 ---
-    st.sidebar.markdown("---")
-    st.sidebar.subheader("🎯 Selection Range")
+    st.subheader(" 📂 Data Selection")
+    st.info("💡 Please select the rows you want to include in the analysis using the checkboxes on the left.")
     
-    # 1. 選擇列 (Rows)
-    with st.sidebar.expander("Select Rows"):
-        selected_rows = []
-        for i in range(len(df_raw)):
-            row_preview = df_raw.iloc[i].dropna().astype(str).tolist()
-            if not row_preview: continue
-            is_picked = st.checkbox(f"Row {i+1}: {row_preview[0]}", value=True, key=f"r_{i}")
-            if is_picked: selected_rows.append(i)
+    # 建立一個帶有勾選欄位的 Dataframe
+    df_with_selections = df_raw.copy()
+    df_with_selections.insert(0, "Select", True)
+    
+    # 使用 data_editor 讓使用者直接在預覽圖上選取
+    edited_df = st.data_editor(
+        df_with_selections,
+        hide_index=True,
+        column_config={"Select": st.column_config.CheckboxColumn(required=True)},
+        disabled=df_raw.columns, # 除了勾選框，其他欄位不可編輯
+        use_container_width=True,
+        key="data_selector"
+    )
 
-    # 2. 選擇欄 (Columns) - 假設第一欄永遠是組名，讓使用者選後面的數據欄
-    with st.sidebar.expander("Select Data Columns"):
-        num_cols = df_raw.shape[1]
-        selected_cols = [0] # 第一欄組名預設必選
-        for j in range(1, num_cols):
-            is_col_picked = st.checkbox(f"Column {j+1}", value=True, key=f"c_{j}")
-            if is_col_picked: selected_cols.append(j)
-
-    if st.sidebar.button(" Execute/Reset Statistical Analysis"):
+    # 執行按鈕
+    if st.sidebar.button(" 🚀 Execute Statistical Analysis"):
+        # 過濾出被勾選的資料
+        selected_data = edited_df[edited_df["Select"] == True].drop(columns=["Select"])
+        
         data_list = []
-        # 只處理選中的列與欄
-        for i in selected_rows:
-            row = df_raw.iloc[i, selected_cols].dropna()
+        for i in range(len(selected_data)):
+            row = selected_data.iloc[i].dropna()
             if len(row) < 2: continue
             
             g_name = str(row.iloc[0])
@@ -107,7 +103,7 @@ if uploaded_file:
                     })
             st.session_state.analysis_results = results
 
-# plot (此部分保持原樣)
+# plot
 if st.session_state.analysis_results:
     res = st.session_state.analysis_results
     df = st.session_state.df_final
