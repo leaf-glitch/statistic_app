@@ -8,7 +8,7 @@ from statsmodels.stats.multicomp import pairwise_tukeyhsd
 # title
 st.set_page_config(page_title="statistics tool", layout="wide")
 st.title("statistics tool")
-st.markdown("Values are labeled at the top of the error bars and rounded to two decimal places")
+
 
 #  Session State 
 if 'analysis_results' not in st.session_state:
