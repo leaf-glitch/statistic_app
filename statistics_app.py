@@ -10,7 +10,7 @@ st.set_page_config(page_title="statistics tool", layout="wide")
 st.title("statistics tool")
 st.markdown("Values are labeled at the top of the error bars and rounded to two decimal places")
 
-#  Session State 
+# Session State 
 if 'analysis_results' not in st.session_state:
     st.session_state.analysis_results = None
 if 'df_final' not in st.session_state:
@@ -45,20 +45,31 @@ if uploaded_file:
     st.subheader(" Raw Data Preview")
     st.dataframe(df_raw, use_container_width=True)
 
+    # 選擇分析範圍
+    st.sidebar.markdown("---")
+    st.sidebar.subheader("🎯 Select Analysis Range")
+    
+    selected_rows = []
+    for i in range(len(df_raw)):
+        row_preview = df_raw.iloc[i].dropna().astype(str).tolist()
+        if not row_preview: continue
+        preview_text = f"Row {i+1}: {' | '.join(row_preview[:3])}..."
+        is_picked = st.sidebar.checkbox(preview_text, value=True, key=f"row_sel_{i}")
+        if is_picked:
+            selected_rows.append(i)
+
     if st.sidebar.button(" Execute/Reset Statistical Analysis"):
         data_list = []
-        for i in range(len(df_raw)):
+        for i in selected_rows:
             row = df_raw.iloc[i].dropna()
             if len(row) < 2: continue
             g_name = str(row.iloc[0])
-            valid_nums_found = 0
             for v in row.iloc[1:]:
-                try: 
+                try:
                     num_value = float(v)
                     data_list.append({"group": g_name, "value": num_value})
-                    valid_nums_found += 1
                 except (ValueError, TypeError):
-                     continue
+                    continue
         
         if data_list:
             final_df = pd.DataFrame(data_list)
@@ -129,7 +140,6 @@ if st.session_state.analysis_results:
                    color=s['color'], hatch=s['hatch'],
                    edgecolor='black', linewidth=2, capsize=6)
             
-            # Add value labels on top of error bars
             label_y = row['mean'] + row['std'] + (max_total_y * 0.02)
             ax.text(i, label_y, f"{row['mean']:.2f}", ha='center', va='bottom', 
                     fontweight='bold', color='black', fontsize=10)
