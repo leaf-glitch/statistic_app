@@ -57,7 +57,7 @@ if uploaded_file:
                      data_list.append({"group": g_name, "value": num_value})
                      valid_nums_found += 1
                 except (ValueError, TypeError):
-                    continue
+                     continue
         
         if data_list:
             final_df = pd.DataFrame(data_list)
