@@ -40,22 +40,22 @@ if uploaded_file:
         df_raw = pd.read_excel(uploaded_file, header=None)
     df_raw = df_raw.dropna(how='all')
 
-    st.subheader("📂 Data Selection & Column Settings")
+    st.subheader("Data Selection")
     
     col_count = df_raw.shape[1]
     col_names = [f"Column {i+1}" for i in range(col_count)]
     
     c1, c2, c3 = st.columns(3)
     with c1:
-        group_col_index = st.selectbox("🎯 Group Name Column", 
+        group_col_index = st.selectbox("Group Name Column", 
                                        options=range(col_count), 
                                        format_func=lambda x: col_names[x])
     with c2:
-        start_data_col = st.number_input("📊 Data Start Column", min_value=1, max_value=col_count, value=2)
+        start_data_col = st.number_input("Data Start Column", min_value=1, max_value=col_count, value=2)
     with c3:
-        end_data_col = st.number_input("📊 Data End Column", min_value=1, max_value=col_count, value=col_count)
+        end_data_col = st.number_input("Data End Column", min_value=1, max_value=col_count, value=col_count)
 
-    st.info(f"💡 Analyzing: **{col_names[group_col_index]}** as group names, and data from **Column {start_data_col}** to **Column {end_data_col}**.")
+    st.info(f"Analyzing: **{col_names[group_col_index]}** as group names, and data from **Column {start_data_col}** to **Column {end_data_col}**.")
     
     # Data Editor
     df_with_selections = df_raw.copy()
@@ -71,7 +71,7 @@ if uploaded_file:
         key="data_selector"
     )
 
-    if st.sidebar.button("🚀 Execute Statistical Analysis"):
+    if st.sidebar.button("Analysis"):
         selected_rows_df = edited_df[edited_df["Select"] == True].drop(columns=["Select"])
         
         data_list = []
