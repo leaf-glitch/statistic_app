@@ -34,21 +34,30 @@ analysis_type = st.sidebar.selectbox("Statistics Test Type", ["one-way ANOVA", "
 uploaded_file = st.file_uploader("Upload Excel/CSV", type=["xlsx", "csv"])
 
 if uploaded_file:
-    # Load raw data
     if uploaded_file.name.endswith('.csv'):
         df_raw = pd.read_csv(uploaded_file, header=None)
     else:
         df_raw = pd.read_excel(uploaded_file, header=None)
     df_raw = df_raw.dropna(how='all')
 
-    st.subheader("Select Row & Column")
+    st.subheader("📂 Data Selection & Column Settings")
     
-    col_names = [f"Column {i+1}" for i in range(df_raw.shape[1])]
-    group_col_index = st.selectbox("Group Names", 
-                                   options=range(len(col_names)), 
-                                   format_func=lambda x: col_names[x])
+    col_count = df_raw.shape[1]
+    col_names = [f"Column {i+1}" for i in range(col_count)]
+    
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        group_col_index = st.selectbox("🎯 Group Name Column", 
+                                       options=range(col_count), 
+                                       format_func=lambda x: col_names[x])
+    with c2:
+        start_data_col = st.number_input("📊 Data Start Column", min_value=1, max_value=col_count, value=2)
+    with c3:
+        end_data_col = st.number_input("📊 Data End Column", min_value=1, max_value=col_count, value=col_count)
 
-    # Display Data Editor
+    st.info(f"💡 Analyzing: **{col_names[group_col_index]}** as group names, and data from **Column {start_data_col}** to **Column {end_data_col}**.")
+    
+    # Data Editor
     df_with_selections = df_raw.copy()
     df_with_selections.columns = col_names
     df_with_selections.insert(0, "Select", True)
@@ -62,18 +71,22 @@ if uploaded_file:
         key="data_selector"
     )
 
-    if st.sidebar.button("Analysis"):
+    if st.sidebar.button("🚀 Execute Statistical Analysis"):
         selected_rows_df = edited_df[edited_df["Select"] == True].drop(columns=["Select"])
         
         data_list = []
+        # Convert user 1-based index to 0-based index for slice
+        data_idx_range = range(start_data_col - 1, end_data_col)
+        
         for i in range(len(selected_rows_df)):
             row = selected_rows_df.iloc[i]
             g_name = str(row.iloc[group_col_index]).strip()
             
-            for j, v in enumerate(row):
+            for j in data_idx_range:
+                # Skip if this column is the group name column itself
                 if j == group_col_index: continue
                 try:
-                    val_clean = pd.to_numeric(v, errors='coerce')
+                    val_clean = pd.to_numeric(row.iloc[j], errors='coerce')
                     if not np.isnan(val_clean):
                         data_list.append({"group": g_name, "value": float(val_clean)})
                 except:
@@ -100,7 +113,7 @@ if uploaded_file:
                         "label": f"{r['group1']} vs {r['group2']}",
                         "g1": str(r['group1']), "g2": str(r['group2']), "p": float(r['p-adj'])
                     })
-            else: # T-test
+            else:
                 if len(group_data) >= 2:
                     t_stat, p_val = stats.ttest_ind(group_data[0], group_data[1], nan_policy='omit')
                     results["p_total"] = p_val
@@ -161,7 +174,6 @@ if st.session_state.get('analysis_results') and st.session_state.get('df_final')
         ax.spines[['top', 'right']].set_visible(False)
         st.pyplot(fig)
 
-    # --- View Statistical Report (Added back) ---
     with st.expander("View Detailed Statistical Report"):
         st.write(f"Overall Test Result: p = {res['p_total']:.6f}")
         if "tukey_df" in res:
