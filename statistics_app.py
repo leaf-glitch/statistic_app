@@ -5,12 +5,12 @@ import numpy as np
 from scipy import stats
 from statsmodels.stats.multicomp import pairwise_tukeyhsd
 
-# title
+# --- Page Setting ---
 st.set_page_config(page_title="statistics tool", layout="wide")
 st.title("statistics tool")
 st.markdown("Values are labeled at the top of the error bars and rounded to two decimal places")
 
-# Session State 
+# --- Initialize Session State ---
 if 'analysis_results' not in st.session_state:
     st.session_state.analysis_results = None
 if 'df_final' not in st.session_state:
@@ -28,12 +28,13 @@ def get_sig_stars(p):
     elif p < 0.05: return "*"
     return "n.s."
 
-# upload
+# --- Sidebar: Data Analysis ---
 st.sidebar.header("analysis")
 analysis_type = st.sidebar.selectbox("Statistics Test Type", ["one-way ANOVA", "T-test"])
 uploaded_file = st.file_uploader("Upload Excel/CSV", type=["xlsx", "csv"])
 
 if uploaded_file:
+    # Load data
     if uploaded_file.name.endswith('.csv'):
         df_raw = pd.read_csv(uploaded_file, header=None)
     else:
@@ -42,17 +43,17 @@ if uploaded_file:
 
     st.subheader("📂 Data Selection & Column Settings")
     
-    # 讓使用者選哪一欄是「組別名稱」
+    # Let user pick which column is the Group Name
     col_names = [f"Column {i+1}" for i in range(df_raw.shape[1])]
     group_col_index = st.selectbox("🎯 Which column contains the **Group Names**?", 
                                    options=range(len(col_names)), 
                                    format_func=lambda x: col_names[x])
 
-    st.info("💡 Select rows to include in analysis. Non-numeric values in data columns will be ignored automatically.")
+    st.info("💡 Select rows to include. Non-numeric values in other columns will be skipped.")
     
-    # 建立帶勾選框的預覽表
+    # Create preview table with selection checkboxes
     df_with_selections = df_raw.copy()
-    df_with_selections.columns = col_names # 暫時命名欄位方便識別
+    df_with_selections.columns = col_names
     df_with_selections.insert(0, "Select", True)
     
     edited_df = st.data_editor(
@@ -65,16 +66,15 @@ if uploaded_file:
     )
 
     if st.sidebar.button("🚀 Execute Statistical Analysis"):
-        selected_data = edited_df[edited_df["Select"] == True].drop(columns=["Select"])
+        selected_rows_df = edited_df[edited_df["Select"] == True].drop(columns=["Select"])
         
         data_list = []
-        for i in range(len(selected_data)):
-            row = selected_data.iloc[i]
-            # 根據使用者選的 Index 抓組名
+        for i in range(len(selected_rows_df)):
+            row = selected_rows_df.iloc[i]
             g_name = str(row.iloc[group_col_index])
             
-            # 遍歷所有欄位，只要不是組名欄且是數字就抓進去
             for j, v in enumerate(row):
+                # Skip the group name column, only take numbers
                 if j == group_col_index: continue
                 try:
                     num_value = float(v)
@@ -88,10 +88,13 @@ if uploaded_file:
             group_data = final_df.groupby("group")["value"].apply(list)
             
             results = {"type": analysis_type, "pairs": []}
+            
+            # --- Statistics Logic ---
             if analysis_type == "one-way ANOVA":
                 f_stat, p_val = stats.f_oneway(*group_data)
                 results["p_total"] = p_val
                 if p_val < 0.05:
+                    # Multi-group comparison
                     tukey = pairwise_tukeyhsd(final_df['value'], final_df['group'], 0.05)
                     tukey_res = pd.DataFrame(data=tukey.summary().data[1:], columns=tukey.summary().data[0])
                     results["tukey_df"] = tukey_res
@@ -100,7 +103,7 @@ if uploaded_file:
                             "label": f"{r['group1']} vs {r['group2']}",
                             "g1": r['group1'], "g2": r['group2'], "p": r['p-adj'], "sig": r['reject']
                         })
-            else:
+            else: # T-test
                 if len(group_data) == 2:
                     t_stat, p_val = stats.ttest_ind(group_data.iloc[0], group_data.iloc[1])
                     results["p_total"] = p_val
@@ -110,7 +113,7 @@ if uploaded_file:
                     })
             st.session_state.analysis_results = results
 
-# plot 
+# --- Plot Section ---
 if st.session_state.analysis_results:
     res = st.session_state.analysis_results
     df = st.session_state.df_final
@@ -135,6 +138,7 @@ if st.session_state.analysis_results:
             if is_checked: selected_pairs.append(pair)
 
     with col_plot:
+        # Calculate mean and std
         stats_summary = df.groupby("group")["value"].agg(['mean', 'std']).reindex(unique_groups).reset_index()
         fig, ax = plt.subplots(figsize=(8, 6))
         x_pos = np.arange(len(unique_groups))
@@ -142,10 +146,14 @@ if st.session_state.analysis_results:
 
         for i, row in stats_summary.iterrows():
             s = group_styles[row['group']]
+            # Draw bar with error bar
             ax.bar(i, row['mean'], yerr=[[0], [row['std']]], color=s['color'], hatch=s['hatch'], edgecolor='black', linewidth=2, capsize=6)
+            
+            # Label mean value at the top of error bar
             label_y = row['mean'] + row['std'] + (max_total_y * 0.02)
             ax.text(i, label_y, f"{row['mean']:.2f}", ha='center', va='bottom', fontweight='bold', color='black', fontsize=10)
 
+        # Draw significance lines
         if selected_pairs:
             selected_pairs.sort(key=lambda x: abs(unique_groups.index(str(x['g1'])) - unique_groups.index(str(x['g2']))))
             base_y = max_total_y * 1.15
@@ -157,11 +165,12 @@ if st.session_state.analysis_results:
                 ax.plot([idx1, idx1, idx2, idx2], [y-tick_h, y, y, y-tick_h], color='black', lw=1.5)
                 ax.text((idx1+idx2)/2, y, get_sig_stars(p['p']), ha='center', va='bottom', fontsize=12, fontweight='bold')
 
+        # Formatting
         ax.set_xticks(x_pos)
         ax.set_xticklabels(unique_groups)
         ax.spines['top'].set_visible(False)
         ax.spines['right'].set_visible(False)
-        ax.set_ylim(0, ax.get_ylim()[1] * 1.25)
+        ax.set_ylim(0, ax.get_ylim()[1] * 1.3)
         st.pyplot(fig)
         
     with st.expander(" View Detailed Statistical Report"):
