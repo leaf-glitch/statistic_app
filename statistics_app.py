@@ -73,7 +73,6 @@ if uploaded_file:
             for j, v in enumerate(row):
                 if j == group_col_index: continue
                 try:
-                    # Force conversion to float to avoid NaN in stats
                     val_clean = pd.to_numeric(v, errors='coerce')
                     if not np.isnan(val_clean):
                         data_list.append({"group": g_name, "value": float(val_clean)})
@@ -82,7 +81,6 @@ if uploaded_file:
         
         if data_list:
             final_df = pd.DataFrame(data_list)
-            # Ensure 'value' column is float type
             final_df['value'] = final_df['value'].astype(float)
             st.session_state.df_final = final_df
             
@@ -94,7 +92,6 @@ if uploaded_file:
             if analysis_type == "one-way ANOVA":
                 f_stat, p_val = stats.f_oneway(*group_data)
                 results["p_total"] = p_val
-                # Pairwise comparison
                 tukey = pairwise_tukeyhsd(final_df['value'], final_df['group'], 0.05)
                 tukey_res = pd.DataFrame(data=tukey.summary().data[1:], columns=tukey.summary().data[0])
                 results["tukey_df"] = tukey_res
@@ -138,7 +135,6 @@ if st.session_state.get('analysis_results') and st.session_state.get('df_final')
                 selected_pairs.append(pair)
 
     with col_plot:
-        # Group statistics
         stats_summary = df.groupby("group")["value"].agg(['mean', 'std']).reindex(unique_groups).reset_index()
         fig, ax = plt.subplots(figsize=(8, 6))
         x_pos = np.arange(len(unique_groups))
@@ -164,3 +160,9 @@ if st.session_state.get('analysis_results') and st.session_state.get('df_final')
         ax.set_xticklabels(unique_groups)
         ax.spines[['top', 'right']].set_visible(False)
         st.pyplot(fig)
+
+    # --- View Statistical Report (Added back) ---
+    with st.expander("View Detailed Statistical Report"):
+        st.write(f"Overall Test Result: p = {res['p_total']:.6f}")
+        if "tukey_df" in res:
+            st.dataframe(res["tukey_df"], use_container_width=True)
