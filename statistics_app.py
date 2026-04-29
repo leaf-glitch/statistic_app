@@ -34,7 +34,7 @@ analysis_type = st.sidebar.selectbox("Statistics Test Type", ["one-way ANOVA", "
 uploaded_file = st.file_uploader("Upload Excel/CSV", type=["xlsx", "csv"])
 
 if uploaded_file:
-    # Load data
+    # Load raw data
     if uploaded_file.name.endswith('.csv'):
         df_raw = pd.read_csv(uploaded_file, header=None)
     else:
@@ -43,15 +43,12 @@ if uploaded_file:
 
     st.subheader("📂 Data Selection & Column Settings")
     
-    # Let user pick which column is the Group Name
     col_names = [f"Column {i+1}" for i in range(df_raw.shape[1])]
     group_col_index = st.selectbox("🎯 Which column contains the **Group Names**?", 
                                    options=range(len(col_names)), 
                                    format_func=lambda x: col_names[x])
 
-    st.info("💡 Select rows and click Execute. Note: Non-numeric data in values columns will be ignored.")
-    
-    # Create preview table
+    # Display Data Editor
     df_with_selections = df_raw.copy()
     df_with_selections.columns = col_names
     df_with_selections.insert(0, "Select", True)
@@ -71,53 +68,53 @@ if uploaded_file:
         data_list = []
         for i in range(len(selected_rows_df)):
             row = selected_rows_df.iloc[i]
-            # Strip spaces to prevent group name mismatch
             g_name = str(row.iloc[group_col_index]).strip()
             
             for j, v in enumerate(row):
                 if j == group_col_index: continue
                 try:
-                    num_value = float(v)
-                    data_list.append({"group": g_name, "value": num_value})
-                except (ValueError, TypeError):
+                    # Force conversion to float to avoid NaN in stats
+                    val_clean = pd.to_numeric(v, errors='coerce')
+                    if not np.isnan(val_clean):
+                        data_list.append({"group": g_name, "value": float(val_clean)})
+                except:
                     continue
         
         if data_list:
             final_df = pd.DataFrame(data_list)
+            # Ensure 'value' column is float type
+            final_df['value'] = final_df['value'].astype(float)
             st.session_state.df_final = final_df
             
-            # Prepare data for stats
             group_names = final_df['group'].unique()
-            group_data = [final_df[final_df['group'] == g]['value'].tolist() for g in group_names]
+            group_data = [final_df[final_df['group'] == g]['value'].values for g in group_names]
             
             results = {"type": analysis_type, "pairs": []}
             
-            # --- Statistics Logic ---
             if analysis_type == "one-way ANOVA":
                 f_stat, p_val = stats.f_oneway(*group_data)
                 results["p_total"] = p_val
-                # Always allow pair comparison if more than 1 group
+                # Pairwise comparison
                 tukey = pairwise_tukeyhsd(final_df['value'], final_df['group'], 0.05)
                 tukey_res = pd.DataFrame(data=tukey.summary().data[1:], columns=tukey.summary().data[0])
                 results["tukey_df"] = tukey_res
                 for _, r in tukey_res.iterrows():
                     results["pairs"].append({
                         "label": f"{r['group1']} vs {r['group2']}",
-                        "g1": str(r['group1']), "g2": str(r['group2']), "p": r['p-adj']
+                        "g1": str(r['group1']), "g2": str(r['group2']), "p": float(r['p-adj'])
                     })
             else: # T-test
                 if len(group_data) >= 2:
-                    # Compare the first two groups
-                    t_stat, p_val = stats.ttest_ind(group_data[0], group_data[1])
+                    t_stat, p_val = stats.ttest_ind(group_data[0], group_data[1], nan_policy='omit')
                     results["p_total"] = p_val
                     results["pairs"].append({
                         "label": f"{group_names[0]} vs {group_names[1]}",
-                        "g1": str(group_names[0]), "g2": str(group_names[1]), "p": p_val
+                        "g1": str(group_names[0]), "g2": str(group_names[1]), "p": float(p_val)
                     })
             st.session_state.analysis_results = results
 
 # --- Plot Section ---
-if st.session_state.analysis_results and st.session_state.df_final is not None:
+if st.session_state.get('analysis_results') and st.session_state.get('df_final') is not None:
     res = st.session_state.analysis_results
     df = st.session_state.df_final
     unique_groups = list(df['group'].unique())
@@ -134,50 +131,36 @@ if st.session_state.analysis_results and st.session_state.df_final is not None:
                 h = st.selectbox(f"hatch", list(hatch_options.keys()), key=f"h_{g}")
                 group_styles[g] = {"color": c, "hatch": hatch_options[h]}
         
-        st.write("Select Significance Lines to Display")
+        st.write("Select Significance Lines")
         selected_pairs = []
-        # Checkboxes for each pair
         for pair in res["pairs"]:
-            is_checked = st.checkbox(f"{pair['label']} (p={pair['p']:.4f})", 
-                                     value=False, 
-                                     key=f"check_{pair['label']}")
-            if is_checked:
+            if st.checkbox(f"{pair['label']} (p={pair['p']:.4f})", key=f"check_{pair['label']}"):
                 selected_pairs.append(pair)
 
     with col_plot:
+        # Group statistics
         stats_summary = df.groupby("group")["value"].agg(['mean', 'std']).reindex(unique_groups).reset_index()
         fig, ax = plt.subplots(figsize=(8, 6))
         x_pos = np.arange(len(unique_groups))
         
-        # Draw bars
         for i, row in stats_summary.iterrows():
             s = group_styles[row['group']]
-            ax.bar(i, row['mean'], yerr=[[0], [row['std']]], color=s['color'], hatch=s['hatch'], edgecolor='black', linewidth=2, capsize=6)
-            
-            # Label values
-            label_y = row['mean'] + (row['std'] if not np.isnan(row['std']) else 0)
-            ax.text(i, label_y + (max(stats_summary['mean'])*0.02), f"{row['mean']:.2f}", ha='center', va='bottom', fontweight='bold')
+            m, sd = row['mean'], row['std'] if not np.isnan(row['std']) else 0
+            ax.bar(i, m, yerr=[[0], [sd]], color=s['color'], hatch=s['hatch'], edgecolor='black', linewidth=2, capsize=6)
+            ax.text(i, m + sd + (max(stats_summary['mean'])*0.02), f"{m:.2f}", ha='center', fontweight='bold')
 
-        # Draw lines
         if selected_pairs:
             y_max = (stats_summary['mean'] + stats_summary['std'].fillna(0)).max()
-            base_y = y_max * 1.1
-            step_y = y_max * 0.12
-            
+            base_y, step_y = y_max * 1.1, y_max * 0.15
             for i, p in enumerate(selected_pairs):
                 try:
-                    idx1 = unique_groups.index(p['g1'])
-                    idx2 = unique_groups.index(p['g2'])
+                    idx1, idx2 = unique_groups.index(p['g1']), unique_groups.index(p['g2'])
                     h_y = base_y + (i * step_y)
-                    tick = step_y * 0.15
-                    ax.plot([idx1, idx1, idx2, idx2], [h_y - tick, h_y, h_y, h_y - tick], color='black', lw=1.5)
+                    ax.plot([idx1, idx1, idx2, idx2], [h_y - (step_y*0.2), h_y, h_y, h_y - (step_y*0.2)], color='black', lw=1.5)
                     ax.text((idx1 + idx2) / 2, h_y, get_sig_stars(p['p']), ha='center', va='bottom', fontweight='bold')
-                except ValueError:
-                    continue # Skip if group name not found
+                except: continue
 
         ax.set_xticks(x_pos)
         ax.set_xticklabels(unique_groups)
-        ax.spines['top'].set_visible(False)
-        ax.spines['right'].set_visible(False)
-        ax.set_ylim(0, ax.get_ylim()[1] * 1.2)
+        ax.spines[['top', 'right']].set_visible(False)
         st.pyplot(fig)
