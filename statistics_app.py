@@ -41,10 +41,10 @@ if uploaded_file:
         df_raw = pd.read_excel(uploaded_file, header=None)
     df_raw = df_raw.dropna(how='all')
 
-    st.subheader("📂 Data Selection & Column Settings")
+    st.subheader("Select Row & Column")
     
     col_names = [f"Column {i+1}" for i in range(df_raw.shape[1])]
-    group_col_index = st.selectbox("🎯 Which column contains the **Group Names**?", 
+    group_col_index = st.selectbox("Group Names", 
                                    options=range(len(col_names)), 
                                    format_func=lambda x: col_names[x])
 
@@ -62,7 +62,7 @@ if uploaded_file:
         key="data_selector"
     )
 
-    if st.sidebar.button("🚀 Execute Statistical Analysis"):
+    if st.sidebar.button("Analysis"):
         selected_rows_df = edited_df[edited_df["Select"] == True].drop(columns=["Select"])
         
         data_list = []
