@@ -170,7 +170,8 @@ if st.session_state.get('analysis_results') and st.session_state.get('df_final')
                 except: continue
 
         ax.set_xticks(x_pos)
-        ax.set_xticklabels(unique_groups)
+        # 修正這行：設定旋轉角度 45 度，並對齊水平右側以防止蓋到圖表
+        ax.set_xticklabels(unique_groups, rotation=45, ha='right')
         ax.spines[['top', 'right']].set_visible(False)
         st.pyplot(fig)
 
